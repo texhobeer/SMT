@@ -19,12 +19,6 @@ class Cell:
         self.x = x
         self.y = y
 
-    def __repr__(self):
-        return "x = " + str(self.x) + " y = " + str(self.y)
-
-    def __str__(self):
-        return "x = " + str(self.x) + " y = " + str(self.y)
-
     def to_xml(self):
         return "\t<point x=\"" + str(self.x) + "\" y=\"" + str(self.y) +"\" layer=\"pins\" type=\"pin\" />"
 

@@ -170,15 +170,15 @@ class Grid:
         for child in net:
             self.parse_child(child)
 
-    def __str__(self):
-        ans = ""
+    def draw(self):
+        pic = ""
         for y in range(self.size):
             for x in range(self.size):
                 symbol = str(self.get_cell_at_pos(x, y))
-                ans += symbol
+                pic += symbol
             if y < self.size - 1:
-                ans += "\n"
-        return ans
+                pic += "\n"
+        print(pic)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -197,6 +197,6 @@ if __name__ == "__main__":
 
     grid.parse_net(net)
 
-    print(str(grid))
+    grid.draw()
 
     Cell.print_descr(args.no_duplication, args.no_colors)
