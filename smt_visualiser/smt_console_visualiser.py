@@ -164,7 +164,7 @@ class Grid:
             self.parse_segment(child)
 
     def parse_net(self, net):
-        grid_size = int(net.attrib['n'])
+        grid_size = int(net.attrib['grid_size'])
 
         self.init_self(grid_size)
         for child in net:

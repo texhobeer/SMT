@@ -45,7 +45,7 @@ def make_bench_name(grid_size, pins_num, seed):
     return name + ".xml"
 
 def bench_beg(grid_size, pins_num):
-    return "<net n=\"" + str(grid_size) + "\" m=\"" + str(pins_num) + "\">"
+    return "<net grid_size=\"" + str(grid_size) + "\" pin_count=\"" + str(pins_num) + "\">"
 
 def bench_end():
     return "</net>"
