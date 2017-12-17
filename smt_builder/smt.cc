@@ -11,6 +11,21 @@ SMT::Marker::Marker( unsigned id)
     this->counter = 0;
 }
 
+SMT::Marker::Marker( const Marker& other)
+{
+    this->id = other.id;
+    this->counter = 0;
+}
+
+SMT::Marker& SMT::Marker::operator=( const Marker& other)
+{
+    this->id = other.id;
+    this->counter = 0;
+    this->marked_points.clear();
+
+    return *this;
+}
+
 void SMT::Marker::AddPoint( Point* point)
 {
     Marker* old_marker = point->GetMarker();
@@ -18,7 +33,7 @@ void SMT::Marker::AddPoint( Point* point)
     this->counter += old_marker->counter;
     old_marker->counter = 0;
 
-    for ( std::list<Point*>::iterator it = old_marker->marked_points.begin();
+    for ( auto it = old_marker->marked_points.begin();
           it != old_marker->marked_points.end();
           ++it)
     {
@@ -77,14 +92,93 @@ unsigned SMT::Point::GetSCCCounter()
     return this->marker->GetCounter();
 }
 
+SMT::Point::PointType SMT::Point::GetType()
+{
+    return this->type;
+}
+
 void SMT::Point::SetMarker( Marker* m)
 {
     this->marker = m;
 }
 
+void SMT::Point::SetType( PointType t)
+{
+    this->type = t;
+}
+
 bool SMT::Point::IsPin()
 {
     return this->type == Pin;
+}
+
+bool SMT::Point::IsInvalid()
+{
+    return this->type == Invalid;
+}
+
+bool SMT::Point::IsInBothLayers()
+{
+    bool is_in_m2 = false;
+    bool is_in_m3 = false;
+
+    for ( auto it = this->edges.begin();
+          it != this->edges.end();
+          ++it)
+    {
+        if ( ( *it)->IsInM2Layer() )
+            is_in_m2 = true;
+
+        if ( ( *it)->IsInM3Layer() )
+            is_in_m3 = true;
+    }
+
+    return is_in_m2 && is_in_m3;
+}
+
+bool SMT::Point::IsInM3Layer()
+{
+    for ( auto it = this->edges.begin();
+          it != this->edges.end();
+          ++it)
+    {
+        if ( ( *it)->IsInM3Layer() )
+            return true;
+    }
+
+    return false;
+}
+
+bool SMT::Point::IsPinsM2()
+{
+    return this->type == Pins_M2;
+}
+
+void SMT::Point::FinalizeType()
+{
+    if ( this->IsPin()
+         || this->IsPinsM2() )
+        return;
+
+    if ( this->IsInBothLayers() )
+        this->type = M2_M3;
+    else
+        this->type = Invalid;
+}
+
+void SMT::Point::Link( SMT::Edge* edge)
+{
+    this->edges.push_back( edge);
+}
+
+void SMT::Point::Unlink()
+{
+    this->edges.clear();
+}
+
+void SMT::Point::Unlink( SMT::Edge* edge)
+{
+    this->edges.remove_if( [ edge]( Edge* e) { return e == edge; });
 }
 
 SMT::Point::Point( unsigned x,
@@ -94,7 +188,26 @@ SMT::Point::Point( unsigned x,
     this->posX = x;
     this->posY = y;
     this->type = t;
-    this->marker = NULL;
+    this->marker = nullptr;
+}
+
+SMT::Point::Point( const SMT::Point& other)
+{
+    this->posX = other.posX;
+    this->posY = other.posY;
+    this->type = other.type;
+    this->marker = nullptr;
+}
+
+SMT::Point& SMT::Point::operator=( const SMT::Point& other)
+{
+    this->posX = other.posX;
+    this->posY = other.posY;
+    this->type = other.type;
+    this->marker = nullptr;
+    this->edges.clear();
+
+    return *this;
 }
 
 
@@ -138,12 +251,43 @@ bool SMT::Edge::IsInOneSCC()
     return this->point1->GetSCCId() == this->point2->GetSCCId();
 }
 
-void SMT::Edge::Link()
+bool SMT::Edge::IsInM2Layer()
 {
+    return this->GetPosY1() == this->GetPosY2();
+}
+
+bool SMT::Edge::IsInM3Layer()
+{
+    return this->GetPosX1() == this->GetPosX2();
+}
+
+bool SMT::Edge::IsInBothLayers()
+{
+    return !this->IsInM2Layer() && !this->IsInM3Layer();
+}
+
+void SMT::Edge::PseudoLink()
+{
+    if ( this->IsInOneSCC() )
+        return;
+
     if ( this->point1->GetSCCCounter() < this->point2->GetSCCCounter() )
         std::swap( this->point1, this->point2);
 
     this->point1->GetMarker()->AddPoint( this->point2);
+}
+
+void SMT::Edge::RealLink()
+{
+    this->PseudoLink();
+    this->point1->Link( this);
+    this->point2->Link( this);
+}
+
+void SMT::Edge::FinalLink()
+{
+    this->point1->Link( this);
+    this->point2->Link( this);
 }
 
 unsigned SMT::Edge::GetSCCCounter()
@@ -152,6 +296,16 @@ unsigned SMT::Edge::GetSCCCounter()
         return this->point1->GetSCCCounter();
 
     return 0;
+}
+
+SMT::Point* SMT::Edge::GetPoint1()
+{
+    return this->point1;
+}
+
+SMT::Point* SMT::Edge::GetPoint2()
+{
+    return this->point2;
 }
 
 SMT::Edge::Edge( Point* p1,
@@ -225,7 +379,7 @@ void SMT::AddExistingPoint( unsigned x, unsigned y, Point::PointType t, Edge::St
 {
     Point* point = new Point( x, y, t);
 
-    for ( std::list<Point*>::iterator it = this->existing_points.begin();
+    for ( auto it = this->existing_points.begin();
           it != this->existing_points.end();
           ++it)
     {
@@ -305,6 +459,18 @@ void SMT::DeleteTemporaryPoint()
     this->num_of_points--;
 }
 
+void SMT::DeleteExistingEdges()
+{
+    this->existing_edges.clear();
+
+    for ( auto it = this->existing_points.begin();
+          it != existing_points.end();
+          ++it)
+    {
+        ( *it)->Unlink();
+    }
+}
+
 void SMT::ResetMarkers()
 {
     std::list<Point*>::iterator it_point;
@@ -331,9 +497,13 @@ unsigned SMT::GetPinCount()
 
 void SMT::CollectHananPoints()
 {
-    Cell cell[this->grid_size][this->grid_size];
+    Cell** cell = new Cell* [ this->grid_size];
+    for ( unsigned i = 0; i < this->grid_size; ++i)
+    {
+        cell[ i] = new Cell [ this->grid_size];
+    }
 
-    this->hanan_points.clear();
+    this->ClearListOfPointers( this->hanan_points);
 
     for ( std::list<Point*>::iterator it = this->existing_points.begin();
           it != this->existing_points.end();
@@ -369,14 +539,26 @@ void SMT::CollectHananPoints()
                 this->AddHananPoint( x, y);
         }
     }
+
+    for ( unsigned i = 0; i < this->grid_size; ++i)
+    {
+        delete [] cell[ i];
+    }
+
+    delete cell;
 }
 
-unsigned SMT::CalculateMST()
+unsigned SMT::CalculateMST( bool to_finalize)
 {
     unsigned length = 0;
     unsigned scc_counter = 1;
 
-    for ( std::list<Edge*>::iterator it = this->edges.begin();
+    if ( to_finalize )
+        this->DeleteExistingEdges();
+
+    this->ResetMarkers();
+
+    for ( auto it = this->edges.begin();
           it != this->edges.end() && scc_counter != this->num_of_points;
           ++it)
     {
@@ -384,7 +566,16 @@ unsigned SMT::CalculateMST()
             continue;
 
         length += ( *it)->GetLength();
-        ( *it)->Link();
+
+        if ( to_finalize )
+        {
+            ( *it)->RealLink();
+            this->existing_edges.push_back( *it);
+        }
+        else
+        {
+            ( *it)->PseudoLink();
+        }
 
         unsigned curr_scc_counter = ( *it)->GetSCCCounter();
         if ( curr_scc_counter > scc_counter )
@@ -393,16 +584,21 @@ unsigned SMT::CalculateMST()
 
     if ( scc_counter != this->num_of_points )
         length = -1;
-
-    this->ResetMarkers();
+    else if ( to_finalize )
+        this->current_MST_length = length;
 
     return length;
+}
+
+unsigned SMT::CalculateMST()
+{
+    return this->CalculateMST( false);
 }
 
 bool SMT::SMTIteration()
 {
     unsigned new_length = -1;
-    Point* winner = NULL;
+    Point* winner = nullptr;
     std::list<Point*>::iterator it, winner_it;
 
     for ( it = this->hanan_points.begin();
@@ -411,6 +607,8 @@ bool SMT::SMTIteration()
     {
         unsigned length = -1;
         Point* hanan = *it;
+
+        this->ResetMarkers();
 
         this->AddTemporaryPoint( hanan->GetPosX(), hanan->GetPosY());
         length = this->CalculateMST();
@@ -425,7 +623,6 @@ bool SMT::SMTIteration()
 
         this->DeleteTemporaryEdges();
         this->DeleteTemporaryPoint();
-        this->ResetMarkers();
     }
 
     if ( !winner )
@@ -434,22 +631,167 @@ bool SMT::SMTIteration()
     this->AddPseudoPoint( winner->GetPosX(), winner->GetPosY());
     delete *winner_it;
     this->hanan_points.erase( winner_it);
-    this->current_MST_length = new_length;
+    this->CalculateMST( true);
 
     return true;
 }
 
+void SMT::FinalizeSMT()
+{
+    this->finalized = true;
+    unsigned i = 0;
+
+    for ( auto it = this->existing_points.begin();
+          i < this->num_of_points;
+          ++it, ++i)
+    {
+        ( *it)->FinalizeType();
+
+        if ( !( *it)->IsPin() )
+            continue;
+
+        Point* pins_m2 = new Point( **it);
+        pins_m2->SetType( Point::Pins_M2);
+        this->existing_points.push_back( pins_m2);
+
+        if ( !( *it)->IsInM3Layer() )
+            continue;
+
+        Point* m2_m3 = new Point( **it);
+        m2_m3->SetType( Point::M2_M3);
+        this->existing_points.push_back( m2_m3);
+    }
+
+    for ( auto it = this->existing_edges.begin();
+          it != this->existing_edges.end(); )
+    {
+        if ( !( *it)->IsInBothLayers() )
+        {
+            ++it;
+            continue;
+        }
+
+        unsigned x = ( *it)->GetPosX1();
+        unsigned y = ( *it)->GetPosY2();
+
+        Point* m2_m3 = new Point( x, y, Point::M2_M3);
+        Point* p1 = ( *it)->GetPoint1();
+        Point* p2 = ( *it)->GetPoint2();
+        Edge* e1 = new Edge( p1, m2_m3, Edge::Valid);
+        Edge* e2 = new Edge( p2, m2_m3, Edge::Valid);
+
+        p1->Unlink( *it);
+        p2->Unlink( *it);
+        e1->FinalLink();
+        e2->FinalLink();
+
+        this->existing_points.push_back( m2_m3);
+        this->existing_edges.push_back( e1);
+        this->existing_edges.push_back( e1);
+
+        this->extra_edges.push_back( e1);
+        this->extra_edges.push_back( e2);
+
+        it = this->existing_edges.erase( it);
+    }
+}
+
 unsigned SMT::BuildSMT()
 {
+    if ( this->finalized )
+        return this->current_MST_length;
+
     this->CollectHananPoints();
-    this->current_MST_length = this->CalculateMST();
+    this->CalculateMST( true);
 
     while( this->SMTIteration());
 
-    /** TODO: vias and pin corrections */
-    /** TODO: fill real edges */
+    this->FinalizeSMT();
 
     return this->current_MST_length;
+}
+
+std::list<SMT::Point> SMT::GetPointsList()
+{
+    return this->MakeSafeCopyForListOfPointers( this->existing_points);
+}
+
+std::list<SMT::Edge> SMT::GetEdgesList()
+{
+    auto res = this->MakeSafeCopyForListOfPointers( this->existing_edges);
+    res.splice( res.begin(), this->MakeSafeCopyForListOfPointers( this->extra_edges));
+    return res;
+}
+
+void SMT::Destroy()
+{
+    this->ClearListOfPointers( this->existing_points);
+    this->ClearListOfPointers( this->hanan_points);
+    this->ClearListOfPointers( this->edges);
+    this->ClearListOfPointers( this->markers);
+    this->ClearListOfPointers( this->extra_edges);
+}
+
+template<typename T> std::list<T*> SMT::DuplicateListOfPointers( const std::list<T*>& to_copy)
+{
+    std::list<T*> dest;
+
+    for ( auto it = to_copy.begin();
+          it != to_copy.end();
+          ++it)
+    {
+        dest.push_back( new T( **it));
+    }
+
+    return dest;
+}
+
+template<typename T> std::list<T> SMT::MakeSafeCopyForListOfPointers( const std::list<T*>& to_copy)
+{
+    std::list<T> dest;
+
+    for ( auto it = to_copy.begin();
+          it != to_copy.end();
+          ++it)
+    {
+        dest.push_back( T( **it));
+    }
+
+    return dest;
+}
+
+template<typename T> void SMT::ClearListOfPointers( std::list<T*>& to_clear)
+{
+    for ( auto it = to_clear.begin();
+          it != to_clear.end();
+          ++it)
+    {
+        delete *it;
+    }
+
+    to_clear.clear();
+}
+
+void SMT::PerformCopy( const SMT& other)
+{
+    this->grid_size = other.grid_size;
+    this->pin_count = other.pin_count;
+    this->num_of_points = 0;
+    this->current_MST_length = -1;
+
+    this->finalized = false;
+    unsigned i = 0;
+
+    for ( auto it = other.existing_points.begin();
+          i < other.num_of_points;
+          ++it, ++i)
+    {
+        this->AddExistingPoint( ( *it)->GetPosX(), ( *it)->GetPosY(), ( *it)->GetType(), Edge::Valid);
+    }
+
+    this->hanan_points = this->DuplicateListOfPointers( other.hanan_points);
+
+    this->CalculateMST( true);
 }
 
 SMT::SMT( unsigned N,
@@ -459,35 +801,34 @@ SMT::SMT( unsigned N,
     this->pin_count = M;
     this->num_of_points = 0;
     this->current_MST_length = -1;
+
+    this->finalized = false;
 }
 
 SMT::~SMT()
 {
-    for ( std::list<Point*>::iterator it = this->existing_points.begin();
-          it != this->existing_points.end();
-          ++it)
-    {
-        delete *it;
-    }
+    this->Destroy();
+}
 
-    for ( std::list<Point*>::iterator it = this->hanan_points.begin();
-          it != this->hanan_points.end();
-          ++it)
-    {
-        delete *it;
-    }
+SMT::SMT( const SMT& other)
+{
+    this->PerformCopy( other);
+}
 
-    for ( std::list<Edge*>::iterator it = this->edges.begin();
-          it != this->edges.end();
-          ++it)
-    {
-        delete *it;
-    }
+SMT& SMT::operator=( const SMT& other)
+{
+    this->Destroy();
 
-    for ( std::list<Marker*>::iterator it = this->markers.begin();
-          it != this->markers.end();
-          ++it)
-    {
-        delete *it;
-    }
+    this->PerformCopy( other);
+
+    return *this;
+}
+
+SMT& SMT::operator=( SMT&& other_tmp)
+{
+    this->Destroy();
+
+    *this = other_tmp;
+
+    return *this;
 }
