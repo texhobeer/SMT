@@ -1,8 +1,6 @@
 #include "smt.h"
-//#include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml.hpp"
 #include <stdlib.h>
-#include <iostream>
 #include <string.h>
 #include <fstream>
 #include <vector>
@@ -64,7 +62,7 @@ int main( int argc, char** argv)
         smt.AddPin( atoi( x), atoi( y));
     }
 
-    std::cout << smt.BuildSMT() << std::endl;
+    smt.BuildSMT();
 
     std::list<SMT::Point> sol_points = smt.GetPointsList();
     std::list<SMT::Edge> sol_edges = smt.GetEdgesList();
