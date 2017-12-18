@@ -545,7 +545,7 @@ void SMT::CollectHananPoints()
         delete [] cell[ i];
     }
 
-    delete cell;
+    delete [] cell;
 }
 
 unsigned SMT::CalculateMST( bool to_finalize)
