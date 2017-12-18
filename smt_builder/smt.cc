@@ -686,8 +686,6 @@ void SMT::FinalizeSMT()
         e2->FinalLink();
 
         this->existing_points.push_back( m2_m3);
-        this->existing_edges.push_back( e1);
-        this->existing_edges.push_back( e1);
 
         this->extra_edges.push_back( e1);
         this->extra_edges.push_back( e2);
