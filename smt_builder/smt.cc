@@ -677,6 +677,10 @@ void SMT::FinalizeSMT()
         Point* m2_m3 = new Point( x, y, Point::M2_M3);
         Point* p1 = ( *it)->GetPoint1();
         Point* p2 = ( *it)->GetPoint2();
+
+        bool p1_was_in_m3 = p1->IsInM3Layer();
+        bool p2_was_in_m3 = p2->IsInM3Layer();
+
         Edge* e1 = new Edge( p1, m2_m3, Edge::Valid);
         Edge* e2 = new Edge( p2, m2_m3, Edge::Valid);
 
@@ -684,6 +688,18 @@ void SMT::FinalizeSMT()
         p2->Unlink( *it);
         e1->FinalLink();
         e2->FinalLink();
+
+        if ( !p1_was_in_m3 && p1->IsInM3Layer() )
+        {
+            Point* m2_m3_2 = new Point( p1->GetPosX(), p1->GetPosY(), Point::M2_M3);
+            this->existing_points.push_back( m2_m3_2);
+        }
+
+        if ( !p2_was_in_m3 && p2->IsInM3Layer() )
+        {
+            Point* m2_m3_2 = new Point( p2->GetPosX(), p2->GetPosY(), Point::M2_M3);
+            this->existing_points.push_back( m2_m3_2);
+        }
 
         this->existing_points.push_back( m2_m3);
 
